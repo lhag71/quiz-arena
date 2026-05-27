@@ -1,7 +1,7 @@
 const express = require('express');
 const http = require('http');
 const path = require('path');
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { Server } = require('socket.io');
 const rateLimit = require('express-rate-limit');
