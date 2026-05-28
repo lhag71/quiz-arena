@@ -146,11 +146,10 @@ function shuffleAnswers(question) {
   const correctNewIndex = indexed.findIndex(a => a.originalIndex === question.correct);
   return {
     question: question.question,
-    image: question.image,
-    hasImage: question.hasImage,
     answers: indexed.map(a => a.text),
     correct: correctNewIndex,
-    difficulty: question.difficulty
+    difficulty: question.difficulty,
+    category: question.category
   };
 }
 
@@ -171,7 +170,8 @@ function broadcastLobby(room) {
     hostId: room.hostId,
     players: publicPlayerList(room),
     category: room.category,
-    questionsCount: room.questionsCount
+    questionsCount: room.questionsCount,
+    questionDuration: room.questionDuration
   });
 }
 
@@ -203,19 +203,18 @@ function nextQuestion(room) {
   room.answers = new Map(); // playerId -> { answerIndex, time }
   room.state = 'question';
 
+  const duration = room.questionDuration || 20;
   io.to(room.code).emit('game:question', {
     index: room.currentIndex,
     total: room.questions.length,
     question: q.question,
-    image: q.image,
-    hasImage: q.hasImage,
     answers: q.answers,
-    duration: 20
+    duration
   });
 
   // Timer côté serveur
   clearTimeout(room.questionTimeout);
-  room.questionTimeout = setTimeout(() => revealAnswer(room), 20000);
+  room.questionTimeout = setTimeout(() => revealAnswer(room), duration * 1000);
 }
 
 function revealAnswer(room) {
@@ -233,7 +232,8 @@ function revealAnswer(room) {
     if (answer && answer.answerIndex === q.correct) {
       isCorrect = true;
       const elapsed = (answer.time - room.questionStartTime) / 1000;
-      const ratio = Math.max(0, Math.min(1, elapsed / 20));
+      const dur = room.questionDuration || 20;
+      const ratio = Math.max(0, Math.min(1, elapsed / dur));
       pointsGained = Math.round(1000 - ratio * 900); // 1000 → 100
       p.streak += 1;
       if (p.streak > 1) pointsGained += 100 * (p.streak - 1);
@@ -356,8 +356,9 @@ io.on('connection', (socket) => {
       hostId: playerInfo.id,
       players: new Map(),
       state: 'lobby',
-      category: 'culture',
+      category: 'culture_generale',
       questionsCount: 10,
+      questionDuration: 20,
       questions: [],
       currentIndex: -1,
       answers: new Map()
@@ -409,14 +410,24 @@ io.on('connection', (socket) => {
 
   socket.on('lobby:setCategory', ({ category }) => {
     if (!currentRoom || currentRoom.hostId !== playerInfo?.id) return;
-    currentRoom.category = category;
-    broadcastLobby(currentRoom);
+    if (['culture_generale', 'thematique', 'melange'].includes(category)) {
+      currentRoom.category = category;
+      broadcastLobby(currentRoom);
+    }
   });
 
   socket.on('lobby:setQuestionsCount', ({ count }) => {
     if (!currentRoom || currentRoom.hostId !== playerInfo?.id) return;
     if ([10, 20, 50].includes(count)) {
       currentRoom.questionsCount = count;
+      broadcastLobby(currentRoom);
+    }
+  });
+
+  socket.on('lobby:setDuration', ({ duration }) => {
+    if (!currentRoom || currentRoom.hostId !== playerInfo?.id) return;
+    if ([10, 15, 20, 30].includes(duration)) {
+      currentRoom.questionDuration = duration;
       broadcastLobby(currentRoom);
     }
   });
